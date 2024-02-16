@@ -3,7 +3,7 @@ FreeFEM++ code for the bainary active polar model in E. Gauquelin et al. (2024)
 
 ## Description
 
-This is a FreeFEM++ script for simulating binary active polar model proposed in [1].
+FreeFEM++ script for simulating binary active polar model proposed in [1].
 
 
 See [2] for details.
