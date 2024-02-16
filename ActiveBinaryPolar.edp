@@ -1,0 +1,154 @@
+/*******************************************************************
+
+	FreeFEM++ code for binary polar active matter        
+	Shuji Ishihara 2024/2/16
+	The model for E. Gauquelin et al. 
+
+/*******************************************************************/
+
+include "lib/TensorOperatoprs.edp"
+include "lib/IOlib.edp"
+verbosity = 0;
+
+// filename for output
+string outfile = ARGV[2];
+cerr << outfile << endl;
+ofstream sol(outfile);
+
+/*************************************************************/
+//Parameters
+real Dt = 1.0e-2; // time step
+real SimulationTime = 100; 
+real Lx = 50.0, Ly = 50.0; // system size
+
+// system parameters
+real nuA = 5; // 
+real nuB = 10.0;
+real EtaA = 1.; // 
+real EtaB = 1.; 
+real ApA = 1.; //    
+real ApB = .5; //   
+
+real Aphi =  .1; // 5.;  // 
+real Kphi =  .05;  // 2.5; //
+real M = 10.; //      
+
+real GammaP = 5.; //
+real Cp = .1;  // 
+real KpA = 1.0; //  
+real KpB = 1.0; //  
+real kappa = 0.7; //
+
+
+/*************************************************************/
+// Define functional spaces and variables
+mesh Th = square( 50, 50, [Lx*x,Ly*y] );
+fespace Vh(Th,P2,periodic=[[2, y], [4, y], [1, x], [3, x]]);
+fespace VhV(Th,[P2,P2],periodic=[[2, y], [4, y], [1, x], [3, x]]);
+fespace VhC(Th,[P2,P2,P1],periodic=[[2, y], [4, y], [1, x], [3, x]]);
+fespace VhT(Th,[P2,P2,P2],periodic=[[2, y], [4, y], [1, x], [3, x]]); // for stress, traceless
+
+Vh phi, phiold, psi, cphi, cpsi;
+VhC [u,v,p],[uu,vv,pp];
+VhV [px,py],[cpx,cpy],[pxold,pyold];
+VhV [Hx,Hy];
+VhT [Txx,Txy,Tyx],[Vxx,Vxy,Vyx]; // Vxx = Dvxx
+Vh omega, Dvxy;
+Vh Sp, theta, PdPhi;  // These are used as temporal variables
+
+
+/*************************************************************/
+// set random variables
+int rseed = ltime();
+cout << "### seed= " << rseed << endl;
+randinit(rseed);
+
+int tc = 0; // time evolution counter
+
+/*************************************************************/
+// Macros and problesm are defined in lib/Macros.edp
+include "lib/Macros.edp"
+
+
+/*************************************************************/
+// Show parameters
+OutputParameters(sol);
+
+// Set initial conditions 
+//phi = tanh(5*(y+0.2*sin(pi*x/R)));
+phi = 2*randreal1()-1.0;
+//phi = 2*(x>Lx/4)*(x<3*Lx/4.0)-1;
+
+[ px, py ] = [ 0.2*(randreal1()-0.5), 0.2*(randreal1()-0.5) ];
+[ Txx, Txy, Tyx ] = [ 0, 0, 0 ];
+
+// solve for T/dt timesteps
+int OSTEP = 100; // output results at every OSEP 
+real systemarea = int2d(Th)(1.0); // ara of all domains
+
+for ( tc=0; tc<int(SimulationTime/Dt); tc++ ) {
+	real t = tc*Dt;
+
+	phiold = phi;
+    [ pxold, pyold ] = [ px, py ];
+	Sp = 1.0 - (px*px+py*py);	
+	PdPhi = [px,py]'*[dx(phi),dy(phi)];
+
+	getH;
+	[Txx,Txy,Tyx] =  Nematicstress(H,pol) + CapStress(phi) ;
+
+	VStokes;
+	calcDeforamtions(vel);
+	CH;
+    Pupdate;
+
+
+	if( tc%OSTEP == 0 ){    // output    
+		plot( phi, vel,  coef = 4., fill=true, value=true,  cmm=outfile+" Vel t="+t,dim=2);
+		//plot( phi, pol,  coef = 4., fill=true, value=true,  cmm=outfile+" Pol t="+t,dim=2);
+	
+		real areaA  = int2d(Th)((phi+1)/2);
+		real areaB  = int2d(Th)((1-phi)/2);
+		real avvelA = int2d(Th)((1+phi)*norm(vel)/2); 
+		real avvelB = int2d(Th)((1-phi)*norm(vel)/2); 
+		real avvel  = int2d(Th)(norm(vel))/systemarea;
+		real blen   = int2d(Th)( norm([dx(phi),dy(phi)]));
+		real avPol = int2d(Th)( norm([px,py]) )/systemarea;
+		real avPress = int2d(Th)( p )/systemarea;		
+		real avPressA = int2d(Th)( (phi+1)*p/2 )/areaA;
+		real avPressB = int2d(Th)( (1-phi)*p/2 )/areaB;
+		Sp = 2*Txx*Txx+Txy*Txy+Tyx*Tyx;
+		real avT =  int2d(Th)( Sp )/systemarea;	
+		real avTA = int2d(Th)( (1+phi)*Sp/2 )/areaA;
+		real avTB = int2d(Th)( (1-phi)*Sp/2 )/areaB;
+
+		sol << t << " ";
+		sol << avvel << " ";
+		if( areaA < 1.0e-10 ) sol << " - " ;
+		else sol << avvelA/areaA << " ";
+		if( areaB < 1.0e-10 ) sol << " -  " ;
+		else sol << avvelB/areaB << "  ";
+
+		sol << avPress << " ";
+		if( areaA < 1.0e-10 ) sol << " - " ;
+		else sol << avPressA << " ";
+		if( areaB < 1.0e-10 ) sol << " -  " ;
+		else sol << avPressB << "  ";
+
+		sol << avT << " ";
+		if( areaA < 1.0e-10 ) sol << " - " ;
+		else sol << avTA << " ";
+		if( areaB < 1.0e-10 ) sol << " -  " ;
+		else sol << avTB << "  ";
+
+		sol << avPol << " ";
+		sol << blen << " ";
+		sol << endl;
+		sol.flush;
+	}
+
+}
+
+
+
+

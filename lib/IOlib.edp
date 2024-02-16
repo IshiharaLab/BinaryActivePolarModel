@@ -1,0 +1,35 @@
+/*** output parameters ***/
+macro OutputParameters(sol)
+(
+sol << "### LX=" << Lx << " LY=" << Ly
+	<< "\n### Dt=" << Dt 
+	<< "\n### nuA=" << nuA << " nuB= " << nuB
+	<< "\n### EtaA=" << EtaA << " EtaB= " << EtaB
+	<< "\n### ApA=" << ApA << " ApB= " << ApB 
+	<< "\n### Aphi=" << Aphi << " Kphi= " << Kphi << " M=" << M
+	<< "\n### GammaP=" << GammaP << " Cp=" << Cp << " KpA=" << KpA << " KpB=" << KpB
+	<< "\n### kappa=" << kappa 
+	<< endl
+) // EOM
+
+
+// isovalues
+int niso = 22;
+real[int] viso(niso+1);
+for(int i = 0; i <= niso; i++) viso[i] = -1.2 + 2.4 * i / niso;
+viso[0] = -10000.0;
+viso[niso] = 10000.0;
+viso[1] = -1.0;
+viso[niso-1] = 1.0;
+
+// colormap
+real[int] hsv = [ 0.0, 1.0, 1.0, 0.3, 1.0, 1.0 ];
+
+real[int] colorhsv=[ // color hsv model
+   4./6., 1 , 0.5, // dark blue
+   4./6., 1 , 1, // blue
+   5./6., 1 , 1, // magenta
+   1, 1. , 1, // red
+   1, 0.5 , 1 // light red
+   ];
+

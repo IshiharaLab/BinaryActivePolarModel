@@ -1,0 +1,6 @@
+//macro Omega(vel) ((dy(vel[0])-dx(vel[1]))/2) // EOM
+//macro Dxy(vel)   ((dx(vel[1])+dy(vel[0]))/2) // EOM
+macro sDxx(vel)  ((dx(vel[0])-dy(vel[1]))/2) // EOM
+macro Div(vx,vy)   (dx(vx)+dy(vy))     // EOM
+
+macro norm(v) (sqrt(v[0]*v[0]+v[1]*v[1]))  // EOM

@@ -1,0 +1,68 @@
+// macros for some vectors
+macro vel [u,v]          // EOM
+macro pol [px,py]		 // EOM
+macro H [Hx,Hy]          // EOM
+
+// functions
+macro vcf(phi) ( 0.5*((1+phi)*nuA+(1-phi)*nuB) )     //   phi-dependent viscoisty
+macro apf(phi) ( 0.5*((1+phi)*ApA+(1-phi)*ApB) )     // active self-propelling force
+macro gmf(phi) ( 0.5*((1+phi)*EtaA+(1-phi)*EtaB) )   //   phi-dependent viscoisty
+macro kpf(phi) ( 0.5*((1+phi)*KpA+(1-phi)*KpB) )     //   phi-dependent Kp
+// macro asf(phi) ( 0.5*((1+phi)*zeta1+(1-phi)*zeta2) ) //   strength of active stress 
+
+// nematic stress
+macro Nematicstress(H,pl)(
+    [-kappa*(pl[0]*H[0]-pl[1]*H[1])/2 -kpf(phi)*( dx(pl[0])*dx(pl[0])+dx(pl[1])*dx(pl[1])-dy(pl[0])*dy(pl[0])-dy(pl[1])*dy(pl[1]))/2, 
+	(pl[0]*H[1]-pl[1]*H[0])/2 -kappa*(pl[0]*H[1]+pl[1]*H[0])/2 - kpf(phi)*(dx(pl[0])*dy(pl[0])+dy(pl[1])*dx(pl[1])),
+	(pl[1]*H[0]-pl[0]*H[1])/2 -kappa*(pl[0]*H[1]+pl[1]*H[0])/2 - kpf(phi)*(dx(pl[0])*dy(pl[0])+dy(pl[1])*dx(pl[1]))
+	] ) // EOM
+
+// capillary stress 
+macro CapStress(phi) ( 
+    [ -Kphi*(dx(phi)*dx(phi)-dy(phi)*dy(phi))/2, -Kphi*dx(phi)*dy(phi), -Kphi*dx(phi)*dy(phi) ]) // EOM
+
+// active stress
+//macro ActiveStress(pl) (
+//	asf(phi)*[ (pl[0]*pl[0]-pl[1]*pl[1])/2, pl[0]*pl[1], pl[1]*pl[0] ] 
+//	)  // EOM
+
+// molecular field
+problem getH( [Hx,Hy], [cpx,cpy] ) =
+    int2d(Th)( cpx*Hx + cpy*Hy )
+	+ int2d(Th)( Sp*(cpx*px+cpy*py) -kpf(phi)*( dx(px)*dx(cpx)+dy(px)*dy(cpx)+ dx(py)*dx(cpy)+dy(py)*dy(cpy) ))
+;
+
+//  deforamtion rate (dy(vy) = -dx(vx)); symmetric  and asymmetric part
+macro calcDeforamtions(vel)
+{
+    [Vxx,Vxy,Vyx] = [ dx(vel[0]), dy(vel[0]), dx(vel[1])];
+    Dvxy  = (Vxy+Vyx)/2;  omega = (Vxy-Vyx)/2; 
+} // EOM
+
+// stabilizing factor
+real sf = 0.5; // Crank-Nicoloson at sf = 0.5
+
+// definition of the problems
+// Stokes equation
+problem VStokes([u,v,p],[uu,vv,pp],solver=UMFPACK) =
+	int2d(Th)( vcf(phi)*(dx(u)*dx(uu)+dy(u)*dy(uu)+dx(v)*dx(vv)+dy(v)*dy(vv)) + gmf(phi)*[u,v]'*[uu,vv] )
+	- int2d(Th)( p*Div(uu,vv) -1e+5*Div(u,v)*pp +1e-12*p*pp )
+	+ int2d(Th)( dx(uu)*Txx+dy(uu)*Txy + dx(vv)*Tyx-dy(vv)*Txx )
+	//- int2d(Th)( apf(phi)*[px, py]'*[uu,vv] )
+;
+
+// Cahn-Hilliard equations
+problem CH([phi,psi], [cphi,cpsi],solver=UMFPACK) = 
+    int2d(Th)( cphi*phi/Dt + M*(dx(psi)*dx(cphi) + dy(psi)*dy(cphi)) )
+    - int2d(Th)( convect([u,v], -Dt, phiold)*cphi/Dt )
+	+ int2d(Th)( -psi*cpsi + Kphi*(dx(phi)*dx(cpsi)+dy(phi)*dy(cpsi)) +(1-sf)*Aphi*(phiold*phiold-1)*phi*cpsi  )
+	+ int2d(Th)( sf*Aphi*(phiold*phiold-1)*phiold*cpsi )
+;
+
+// Time evolution of polarity field
+problem Pupdate( [px,py], [cpx,cpy], solver=UMFPACK) =
+	int2d(Th)( (px*cpx+py*cpy)/Dt + omega*(px*cpy-py*cpx) -kappa*(cpx*(Vxx*px+Dvxy*py) + cpy*(Dvxy*px -Vxx*py))  )
+	- int2d(Th)( convect( vel, -Dt, pxold )*cpx/Dt + convect(vel,-Dt,pyold)*cpy/Dt )
+	+ int2d(Th)( -GammaP*((1-sf)*Cp*Sp*(px*cpx+py*cpy)-kpf(phi)*(dx(px)*dx(cpx)+ dy(px)*dy(cpx)+ dx(py)*dx(cpy)+dy(py)*dy(cpy))) )	
+	+ int2d(Th)( -GammaP*sf*Cp*Sp*(pxold*cpx+pyold*cpy) )	
+;
